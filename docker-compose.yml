@@ -1,0 +1,136 @@
+services:
+
+  # -----------------------------------------------------------------------
+  # One-shot Maven builder: compiles fat JAR into shared volume then exits
+  # -----------------------------------------------------------------------
+  proxy-builder:
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /build
+    volumes:
+      - ./proxy:/build               # proxy source
+      - proxy-jar:/output          # output volume: JAR written here
+      - maven-cache:/root/.m2      # dependency cache across runs
+    command: >
+      sh -c "mvn package -q -DskipTests
+      && cp target/crate-proxy-1.0-SNAPSHOT.jar /output/crate-proxy.jar"
+
+  # -----------------------------------------------------------------------
+  # CrateDB 3-node cluster
+  # -----------------------------------------------------------------------
+  cratedb1:
+    image: crate:6.2
+    environment:
+      CRATE_HEAP_SIZE: 1g
+    command: >
+      crate
+      -Cnetwork.host=_site_
+      -Cdiscovery.seed_hosts=cratedb2,cratedb3
+      -Ccluster.initial_master_nodes=cratedb1,cratedb2,cratedb3
+      -Cgateway.expected_data_nodes=3
+      -Cgateway.recover_after_data_nodes=2
+      -Cnode.name=cratedb1
+    ports:
+      - "4200:4200"    # CrateDB admin UI (host debugging)
+      - "5432:5432"    # PostgreSQL wire protocol (host debugging)
+    healthcheck:
+      test:
+        - "CMD"
+        - "curl"
+        - "-sf"
+        - "http://cratedb1:4200/_sql"
+        - "-X"
+        - "POST"
+        - "-H"
+        - "Content-Type: application/json"
+        - "--data"
+        - "{\"stmt\":\"SELECT count(*) FROM sys.nodes\"}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  cratedb2:
+    image: crate:6.2
+    environment:
+      CRATE_HEAP_SIZE: 1g
+    command: >
+      crate
+      -Cnetwork.host=_site_
+      -Cdiscovery.seed_hosts=cratedb1,cratedb3
+      -Ccluster.initial_master_nodes=cratedb1,cratedb2,cratedb3
+      -Cgateway.expected_data_nodes=3
+      -Cgateway.recover_after_data_nodes=2
+      -Cnode.name=cratedb2
+    healthcheck:
+      test:
+        - "CMD"
+        - "curl"
+        - "-sf"
+        - "http://cratedb2:4200/_sql"
+        - "-X"
+        - "POST"
+        - "-H"
+        - "Content-Type: application/json"
+        - "--data"
+        - "{\"stmt\":\"SELECT count(*) FROM sys.nodes\"}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  cratedb3:
+    image: crate:6.2
+    environment:
+      CRATE_HEAP_SIZE: 1g
+    command: >
+      crate
+      -Cnetwork.host=_site_
+      -Cdiscovery.seed_hosts=cratedb1,cratedb2
+      -Ccluster.initial_master_nodes=cratedb1,cratedb2,cratedb3
+      -Cgateway.expected_data_nodes=3
+      -Cgateway.recover_after_data_nodes=2
+      -Cnode.name=cratedb3
+    healthcheck:
+      test:
+        - "CMD"
+        - "curl"
+        - "-sf"
+        - "http://cratedb3:4200/_sql"
+        - "-X"
+        - "POST"
+        - "-H"
+        - "Content-Type: application/json"
+        - "--data"
+        - "{\"stmt\":\"SELECT count(*) FROM sys.nodes\"}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # -----------------------------------------------------------------------
+  # Keycloak -- starts after builder exits successfully and cratedb1 is healthy
+  # -----------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    depends_on:
+      proxy-builder:
+        condition: service_completed_successfully
+      cratedb1:
+        condition: service_healthy
+    volumes:
+      - proxy-jar:/opt/keycloak/providers   # proxy JAR lands here; Keycloak scans at boot
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://cratedb1:5432,cratedb2:5432,cratedb3:5432/doc?loadBalanceHosts=true
+      KC_DB_USERNAME: crate
+      KC_DB_PASSWORD: ""
+      KC_DB_DRIVER: com.example.crateproxy.CrateProxyDriver
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    command: start-dev
+
+volumes:
+  proxy-jar:
+  maven-cache:
