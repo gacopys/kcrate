@@ -95,7 +95,10 @@ public class SqlRewriter {
         if (stmt instanceof CreateTable ct) {
             result = rewriteCreateTable(ct, sql);
         }
-        // PRXY-08: ALTER TABLE rewriting (added in Task 2)
+        // PRXY-08: ALTER TABLE rewriting
+        else if (stmt instanceof Alter alter) {
+            result = rewriteAlter(alter, sql);
+        }
         // Plan 3: CREATE INDEX rewriting (added in Plan 3)
 
         // D-02: log every rewrite
@@ -202,30 +205,48 @@ public class SqlRewriter {
         if (dt == null) return false;
         String typeName = dt.getDataType();
         if (typeName == null) return false;
-        String upper = typeName.toUpperCase();
-        switch (upper) {
+        // JSQLParser 5.3 may embed length in the type name token (e.g. "BINARY (64)" or "NVARCHAR (255)")
+        // so we extract the base type name by trimming at the first space or paren.
+        String base = typeName.split("\\s|\\(")[0].toUpperCase();
+        switch (base) {
             case "CLOB":
             case "NCLOB":
                 dt.setDataType("TEXT");
                 dt.setArgumentsStringList(null);  // TEXT has no length parameter
                 return true;
             case "BINARY":
+                // BINARY(n) → BLOB (no length parameter in CrateDB)
                 dt.setDataType("BLOB");
-                dt.setArgumentsStringList(null);  // BLOB has no length parameter in CrateDB
+                dt.setArgumentsStringList(null);
                 return true;
             case "TINYBLOB":
                 dt.setDataType("BLOB");
                 dt.setArgumentsStringList(null);
                 return true;
             case "NVARCHAR":
-                dt.setDataType("VARCHAR");  // Keep length argument — only strip N prefix
+                // NVARCHAR(n) → VARCHAR(n) — strip N prefix, keep length
+                // JSQLParser may store as "NVARCHAR (255)" — extract length and rebuild
+                {
+                    String args = typeName.contains("(") ? typeName.substring(typeName.indexOf('(')) : null;
+                    if (args != null) {
+                        dt.setDataType("VARCHAR " + args);
+                    } else {
+                        dt.setDataType("VARCHAR");
+                    }
+                    dt.setArgumentsStringList(null);
+                }
                 return true;
             case "TINYINT":
                 dt.setDataType("SMALLINT");
-                // Keep any arguments (though TINYINT usually has none)
                 return true;
             case "TEXT":
                 // Strip spurious length parameter: TEXT(25500) → TEXT
+                // May appear as "TEXT (25500)" in the type name token or as separate args
+                if (typeName.contains("(")) {
+                    dt.setDataType("TEXT");
+                    dt.setArgumentsStringList(null);
+                    return true;
+                }
                 if (dt.getArgumentsStringList() != null && !dt.getArgumentsStringList().isEmpty()) {
                     dt.setArgumentsStringList(null);
                     return true;
@@ -241,5 +262,118 @@ public class SqlRewriter {
         // or net.sf.jsqlparser.statement.create.sequence.AlterSequence depending on version.
         // Use class name check as fallback if import doesn't resolve.
         return stmt.getClass().getSimpleName().equals("AlterSequence");
+    }
+
+    /**
+     * Strips unsupported ALTER TABLE operations for CrateDB compatibility (PRXY-08).
+     *
+     * Operations stripped:
+     *   - ADD CONSTRAINT ... FOREIGN KEY (195 in Keycloak changelogs)
+     *   - ADD CONSTRAINT ... UNIQUE (63 in Keycloak changelogs)
+     *   - DROP CONSTRAINT (FK and UNIQUE)
+     *   - MODIFY / CHANGE COLUMN type (56 modifyDataType operations)
+     *   - SET NOT NULL / ADD NOT NULL CONSTRAINT (34 addNotNullConstraint operations)
+     *   - DROP NOT NULL
+     *   - ALTER COLUMN ... TYPE
+     *
+     * If all operations in the ALTER TABLE are stripped, the entire statement is swallowed
+     * (returns null) to avoid forwarding a bare ALTER TABLE tablename to CrateDB.
+     * Per RESEARCH.md Pitfall 4.
+     *
+     * Returns null if the entire statement is swallowed, else the rewritten SQL string.
+     */
+    private static String rewriteAlter(Alter alter, String originalSql) {
+        List<AlterExpression> expressions = alter.getAlterExpressions();
+        if (expressions == null || expressions.isEmpty()) {
+            return null;  // nothing to forward
+        }
+
+        List<AlterExpression> keepList = new ArrayList<>();
+        boolean anyStripped = false;
+
+        for (AlterExpression expr : expressions) {
+            if (shouldStripAlterExpression(expr)) {
+                anyStripped = true;
+                System.err.println("[CRATE PROXY] STRIP ALTER EXPR: " + expr.getOperation()
+                    + (expr.getConstraintName() != null ? " CONSTRAINT " + expr.getConstraintName() : ""));
+            } else {
+                keepList.add(expr);
+            }
+        }
+
+        if (!anyStripped) return originalSql;  // unchanged — avoid round-trip noise
+
+        if (keepList.isEmpty()) {
+            // All operations stripped — swallow the entire ALTER TABLE statement
+            System.err.println("[CRATE PROXY] SWALLOW ALTER TABLE (all ops stripped): " + originalSql);
+            return null;
+        }
+
+        // Replace expressions with the filtered list and re-serialize
+        alter.setAlterExpressions(keepList);
+        String result = alter.toString();
+        logRewrite(originalSql, result);
+        return result;
+    }
+
+    /**
+     * Returns true if this AlterExpression should be stripped (not forwarded to CrateDB).
+     *
+     * JSQLParser 5.3 AlterOperation enum values relevant here:
+     *   ADD         — check for FK (getFkSourceColumns) or UNIQUE (getUk()) to detect constraint additions
+     *   MODIFY      — column type change (MySQL syntax) — strip all
+     *   ALTER       — ALTER COLUMN ... TYPE or SET/DROP NOT NULL (PostgreSQL syntax) — strip all
+     *   DROP        — DROP CONSTRAINT (when constraint name present — FK or UNIQUE)
+     *   DROP_FOREIGN_KEY — explicit FK drop operation
+     *   DROP_UNIQUE      — explicit UNIQUE drop operation
+     *   CHANGE      — MySQL CHANGE COLUMN — strip all
+     */
+    private static boolean shouldStripAlterExpression(AlterExpression expr) {
+        if (expr == null || expr.getOperation() == null) return false;
+
+        switch (expr.getOperation()) {
+            case ADD:
+                // ADD CONSTRAINT ... FOREIGN KEY: getFkSourceColumns() is non-null and non-empty
+                if (expr.getFkSourceColumns() != null && !expr.getFkSourceColumns().isEmpty()) {
+                    return true;  // FOREIGN KEY constraint
+                }
+                // ADD CONSTRAINT ... UNIQUE: getUk() returns true
+                if (expr.getUk()) {
+                    return true;  // UNIQUE constraint
+                }
+                // Fallback: check string representation for FOREIGN KEY or UNIQUE keyword
+                {
+                    String exprStr = expr.toString().toUpperCase();
+                    if (exprStr.contains("FOREIGN KEY") || exprStr.contains(" UNIQUE")) {
+                        return true;
+                    }
+                }
+                return false;
+
+            case DROP:
+                // DROP CONSTRAINT fk_name or DROP CONSTRAINT uk_name
+                if (expr.getConstraintName() != null) {
+                    return true;
+                }
+                return false;
+
+            case DROP_FOREIGN_KEY:
+            case DROP_UNIQUE:
+                // Explicit FK/UNIQUE drop operations
+                return true;
+
+            case MODIFY:
+                // All column type modifications (MySQL: ALTER TABLE t MODIFY COLUMN col TYPE)
+                return true;
+
+            case ALTER:
+            case CHANGE:
+                // PostgreSQL ALTER COLUMN: type changes, SET NOT NULL, DROP NOT NULL
+                // MySQL CHANGE COLUMN: column rename + type change
+                return true;
+
+            default:
+                return false;
+        }
     }
 }
