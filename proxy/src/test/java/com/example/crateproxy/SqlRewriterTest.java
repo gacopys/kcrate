@@ -241,6 +241,23 @@ public class SqlRewriterTest {
             System.out.println("PASS combined: FK stripped AND WITH clause injected. Result: " + combinedResult);
         }
 
+        // WR-04: CREATE UNIQUE INDEX — UNIQUE keyword must be stripped (A3: CrateDB behavior unverified)
+        // This test documents the current proxy behaviour and flags if the stripping ever breaks.
+        String createUniqueIdx = "CREATE UNIQUE INDEX idx_user_email ON user_entity (email)";
+        String uniqueIdxResult = SqlRewriter.rewrite(createUniqueIdx);
+        if (uniqueIdxResult == null) {
+            System.err.println("FAIL WR-04: CREATE UNIQUE INDEX was swallowed (should produce CREATE INDEX)");
+            failures++;
+        } else if (uniqueIdxResult.toUpperCase().contains("UNIQUE")) {
+            System.err.println("FAIL WR-04: UNIQUE keyword not stripped from CREATE INDEX. Got: " + uniqueIdxResult);
+            failures++;
+        } else if (!uniqueIdxResult.toUpperCase().startsWith("CREATE INDEX")) {
+            System.err.println("FAIL WR-04: Unexpected result for CREATE UNIQUE INDEX. Got: " + uniqueIdxResult);
+            failures++;
+        } else {
+            System.out.println("PASS WR-04: UNIQUE stripped from CREATE INDEX. Result: " + uniqueIdxResult);
+        }
+
         if (failures > 0) {
             System.err.println("TOTAL FAILURES: " + failures);
             System.exit(1);
