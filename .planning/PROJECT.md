@@ -12,17 +12,16 @@ Keycloak runs with full functionality on a 3-node CrateDB cluster, with the prox
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Custom JDBC proxy driver JAR that rewrites Keycloak's SQL for CrateDB compatibility — Validated in Phase 2: JDBC Proxy Implementation
+- [x] JDBC proxy swallows BEGIN/COMMIT/ROLLBACK silently (all ops auto-commit) — Validated in Phase 2: JDBC Proxy Implementation
+- [x] JDBC proxy strips FOREIGN KEY constraints from DDL before forwarding — Validated in Phase 2: JDBC Proxy Implementation
+- [x] JDBC proxy handles unsupported ALTER TABLE / ALTER COLUMN operations — Validated in Phase 2: JDBC Proxy Implementation
 
 ### Active
 
 - [ ] 3-node CrateDB cluster running in Docker Compose with master-master replication
-- [ ] Custom JDBC proxy driver JAR that rewrites Keycloak's SQL for CrateDB compatibility
-- [ ] JDBC proxy swallows BEGIN/COMMIT/ROLLBACK silently (all ops auto-commit)
-- [ ] JDBC proxy strips FOREIGN KEY constraints from DDL before forwarding
 - [ ] JDBC proxy remaps unsupported PostgreSQL types (bytea, uuid, jsonb) to CrateDB equivalents
 - [ ] JDBC proxy handles sequence-based ID generation (rewrite or alternative strategy)
-- [ ] JDBC proxy handles unsupported ALTER TABLE / ALTER COLUMN operations
 - [ ] Keycloak uses official Docker image with JAR injected via volume mount
 - [ ] Keycloak schema migration (Liquibase) completes successfully against CrateDB
 - [ ] Full Keycloak functionality: realm creation, user management, authentication
@@ -79,4 +78,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-22 after initialization*
+*Last updated: 2026-04-22 after Phase 2 (JDBC Proxy Implementation) complete*
