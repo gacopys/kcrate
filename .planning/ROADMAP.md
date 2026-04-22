@@ -43,7 +43,12 @@ Plans:
   2. CREATE TABLE DDL reaching CrateDB contains no FOREIGN KEY or UNIQUE constraint clauses, and includes `WITH (number_of_replicas = '1')`
   3. ALTER TABLE / ALTER COLUMN statements that CrateDB cannot execute are stripped before forwarding
   4. All four JDBC execution paths (Statement.execute, executeQuery, executeUpdate, PreparedStatement) pass through the rewrite pipeline
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — JDBC wrappers (CrateProxyConnection/Statement/PreparedStatement) + transaction swallowing + SELECT FOR UPDATE stripping
+- [ ] 02-02-PLAN.md — DDL rewrites: FK/UNIQUE stripping, type remapping (CLOB/NCLOB/BINARY/TINYBLOB/NVARCHAR/TINYINT), ALTER TABLE unsupported op stripping, CREATE/ALTER SEQUENCE swallowing
+- [ ] 02-03-PLAN.md — Index DDL rewrites: ::type cast stripping, partial index WHERE stripping, CREATE TABLE WITH clause injection
 
 ### Phase 3: Schema Migration
 **Goal**: Liquibase applies all 74 Keycloak changelogs against CrateDB without error, and post-migration fixups leave session/user tables in a consistent-read state
@@ -75,6 +80,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Bootstrap | 1/2 | In Progress|  |
-| 2. JDBC Proxy Implementation | 0/TBD | Not started | - |
+| 2. JDBC Proxy Implementation | 0/3 | Not started | - |
 | 3. Schema Migration | 0/TBD | Not started | - |
 | 4. Functional Validation + Cluster Resilience | 0/TBD | Not started | - |
