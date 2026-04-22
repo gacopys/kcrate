@@ -1,4 +1,4 @@
-.PHONY: up down restart clean logs stop1 stop2 stop3 start1 start2 start3 shell-crate
+.PHONY: up down restart clean logs stop1 stop2 stop3 start1 start2 start3 shell-crate test
 
 CRATE_URL := http://localhost:4200/_sql
 
@@ -45,6 +45,14 @@ start2:
 
 start3:
 	docker compose start cratedb3
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+test:
+	docker build -t crate-test ./test
+	docker run --rm --network host crate-test
 
 # ---------------------------------------------------------------------------
 # Debug
