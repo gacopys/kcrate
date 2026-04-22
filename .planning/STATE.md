@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-jdbc-proxy-implementation plan 02 (DDL rewrite rules)
-last_updated: "2026-04-22T10:22:13.640Z"
+status: verifying
+stopped_at: Completed 02-jdbc-proxy-implementation plan 03 (CREATE INDEX rewriting + WITH clause injection)
+last_updated: "2026-04-22T10:30:45.170Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 
 Phase: 02 (jdbc-proxy-implementation) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-22
 
 Progress: [░░░░░░░░░░] 0%
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 5 | 2 tasks | 4 files |
 | Phase 02-jdbc-proxy-implementation P01 | 25 | 2 tasks | 7 files |
 | Phase 02-jdbc-proxy-implementation P02 | 4 | 2 tasks | 2 files |
+| Phase 02-jdbc-proxy-implementation P03 | 25 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [Phase 02-jdbc-proxy-implementation]: D-01 enforced in Plan 1: all non-transaction SQL parsed through JSQLParser for parse-fail detection and Plans 2-3 hook point
 - [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 Index uses getType() not getIndexType(); ForeignKeyIndex is typed subclass for reliable FK detection
 - [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 embeds length in type name token (BINARY (64)) — base type extracted via split on space/paren before switch
+- [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 CreateIndex has no getWhere()/setWhere() — used regex pre-processing before CCJSqlParserUtil.parse() for both ::cast and WHERE stripping on CREATE INDEX
+- [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 setTableOptionsStrings() omits WITH keyword in serialization — used string append to ct.toString() output for PRXY-11 WITH clause injection
+- [Phase 02-jdbc-proxy-implementation]: PRXY-11 runs unconditionally in rewriteCreateTable() — not gated on modified flag — so plain CREATE TABLE statements also get WITH clause
 
 ### Pending Todos
 
@@ -86,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T10:22:13.638Z
-Stopped at: Completed 02-jdbc-proxy-implementation plan 02 (DDL rewrite rules)
+Last session: 2026-04-22T10:30:45.167Z
+Stopped at: Completed 02-jdbc-proxy-implementation plan 03 (CREATE INDEX rewriting + WITH clause injection)
 Resume file: None

@@ -22,9 +22,9 @@
 - [x] **PRXY-06**: UNIQUE constraints stripped from DDL (63 unique constraint additions)
 - [x] **PRXY-07**: Unsupported types remapped — CLOB→TEXT, NCLOB→TEXT, BINARY(64)→BLOB, TINYBLOB→BLOB, NVARCHAR→VARCHAR, TINYINT→SMALLINT
 - [x] **PRXY-08**: ALTER TABLE / ALTER COLUMN unsupported operations stripped (56 column type changes, 34 NOT NULL additions)
-- [ ] **PRXY-09**: PostgreSQL cast expressions (::varchar) stripped from CREATE INDEX DDL
-- [ ] **PRXY-10**: Partial index WHERE clauses stripped from CREATE INDEX DDL (Keycloak v26.5+ changesets)
-- [ ] **PRXY-11**: CREATE TABLE statements rewritten to include `WITH (number_of_replicas = '1')` for cluster replication
+- [x] **PRXY-09**: PostgreSQL cast expressions (::varchar) stripped from CREATE INDEX DDL
+- [x] **PRXY-10**: Partial index WHERE clauses stripped from CREATE INDEX DDL (Keycloak v26.5+ changesets)
+- [x] **PRXY-11**: CREATE TABLE statements rewritten to include `WITH (number_of_replicas = '1')` for cluster replication
 
 ### Schema Migration
 
@@ -86,9 +86,9 @@
 | PRXY-06 | Phase 2 | Complete |
 | PRXY-07 | Phase 2 | Complete |
 | PRXY-08 | Phase 2 | Complete |
-| PRXY-09 | Phase 2 | Pending |
-| PRXY-10 | Phase 2 | Pending |
-| PRXY-11 | Phase 2 | Pending |
+| PRXY-09 | Phase 2 | Complete |
+| PRXY-10 | Phase 2 | Complete |
+| PRXY-11 | Phase 2 | Complete |
 | MIGR-01 | Phase 3 | Pending |
 | MIGR-02 | Phase 3 | Pending |
 | FUNC-01 | Phase 3 | Pending |

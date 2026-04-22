@@ -48,7 +48,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — JDBC wrappers (CrateProxyConnection/Statement/PreparedStatement) + transaction swallowing + SELECT FOR UPDATE stripping
 - [x] 02-02-PLAN.md — DDL rewrites: FK/UNIQUE stripping, type remapping (CLOB/NCLOB/BINARY/TINYBLOB/NVARCHAR/TINYINT), ALTER TABLE unsupported op stripping, CREATE/ALTER SEQUENCE swallowing
-- [ ] 02-03-PLAN.md — Index DDL rewrites: ::type cast stripping, partial index WHERE stripping, CREATE TABLE WITH clause injection
+- [x] 02-03-PLAN.md — Index DDL rewrites: ::type cast stripping, partial index WHERE stripping, CREATE TABLE WITH clause injection
 
 ### Phase 3: Schema Migration
 **Goal**: Liquibase applies all 74 Keycloak changelogs against CrateDB without error, and post-migration fixups leave session/user tables in a consistent-read state
