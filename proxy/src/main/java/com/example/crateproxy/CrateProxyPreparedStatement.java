@@ -78,7 +78,8 @@ public class CrateProxyPreparedStatement implements PreparedStatement {
     public ResultSet executeQuery(String sql) throws SQLException {
         String rewritten = SqlRewriter.rewrite(sql);
         if (rewritten == null || swallowed) {
-            return real != null ? real.executeQuery("SELECT 1 WHERE 1=0") : null;
+            if (real != null) return real.executeQuery("SELECT 1 WHERE 1=0");
+            throw new SQLException("CRATE PROXY: executeQuery on swallowed PreparedStatement — no connection available");
         }
         return real.executeQuery(rewritten);
     }
