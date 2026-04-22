@@ -59,10 +59,18 @@ public class SqlRewriter {
             // Not a plain SELECT FOR UPDATE — fall through to DDL rules below
         }
 
-        // Rules 3-9: DDL rewrites are added by Plans 2 and 3.
-        // For now, pass all non-transaction SQL through unchanged.
-        // Plans 2 and 3 insert their rewrite branches here (CreateTable, Alter, CreateIndex, etc.)
+        // Parse all remaining SQL through JSQLParser (D-01: throw on parse failure).
+        // Plans 2 and 3 insert DDL rewrite branches here (CreateTable, Alter, CreateIndex, etc.)
+        // before the final return. For Plan 1, we just validate parseability and pass through.
+        Statement stmt = parseSql(sql);
 
+        // Plans 2 and 3 will add:
+        // if (stmt instanceof CreateTable ct) { return rewriteCreateTable(ct); }
+        // if (stmt instanceof Alter alter)    { return rewriteAlter(alter); }
+        // if (stmt instanceof CreateIndex ci) { return rewriteCreateIndex(ci); }
+        // if (stmt instanceof CreateSequence || stmt instanceof AlterSequence) { return null; }
+
+        // Pass through unchanged (no rewrite needed for this statement type in Plan 1)
         return sql;
     }
 
