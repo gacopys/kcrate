@@ -9,9 +9,9 @@ import java.util.Properties;
 import java.util.logging.Logger;
 
 /**
- * Phase 1 passthrough stub.
- * Per D-01: no SQL rewriting -- all calls forwarded directly to pgJDBC.
- * Per D-02: Keycloak will crash on BEGIN; that is acceptable for Phase 1.
+ * CrateDB JDBC proxy driver.
+ * Wraps pgJDBC and intercepts all SQL through SqlRewriter before forwarding to CrateDB.
+ * See SqlRewriter for rewrite rules.
  */
 public class CrateProxyDriver implements Driver {
 
@@ -34,7 +34,9 @@ public class CrateProxyDriver implements Driver {
 
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
-        return REAL.connect(url, info);
+        Connection real = REAL.connect(url, info);
+        if (real == null) return null;
+        return new CrateProxyConnection(real);
     }
 
     @Override
