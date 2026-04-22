@@ -14,10 +14,10 @@
 
 ### Proxy Core
 
-- [ ] **PRXY-01**: Custom JDBC driver wraps pgJDBC and registers via META-INF/services SPI
-- [ ] **PRXY-02**: All 4 JDBC execution paths intercepted (Statement.execute, executeQuery, executeUpdate, PreparedStatement)
-- [ ] **PRXY-03**: BEGIN / COMMIT / ROLLBACK swallowed silently (CrateDB rejects them at parse level)
-- [ ] **PRXY-04**: SELECT FOR UPDATE stripped from all queries (Liquibase lock service issues this as the very first SQL)
+- [x] **PRXY-01**: Custom JDBC driver wraps pgJDBC and registers via META-INF/services SPI
+- [x] **PRXY-02**: All 4 JDBC execution paths intercepted (Statement.execute, executeQuery, executeUpdate, PreparedStatement)
+- [x] **PRXY-03**: BEGIN / COMMIT / ROLLBACK swallowed silently (CrateDB rejects them at parse level)
+- [x] **PRXY-04**: SELECT FOR UPDATE stripped from all queries (Liquibase lock service issues this as the very first SQL)
 - [ ] **PRXY-05**: FOREIGN KEY constraints stripped from CREATE TABLE DDL (195 FK additions in Keycloak schema)
 - [ ] **PRXY-06**: UNIQUE constraints stripped from DDL (63 unique constraint additions)
 - [ ] **PRXY-07**: Unsupported types remapped — CLOB→TEXT, NCLOB→TEXT, BINARY(64)→BLOB, TINYBLOB→BLOB, NVARCHAR→VARCHAR, TINYINT→SMALLINT
@@ -78,10 +78,10 @@
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
-| PRXY-01 | Phase 2 | Pending |
-| PRXY-02 | Phase 2 | Pending |
-| PRXY-03 | Phase 2 | Pending |
-| PRXY-04 | Phase 2 | Pending |
+| PRXY-01 | Phase 2 | Complete |
+| PRXY-02 | Phase 2 | Complete |
+| PRXY-03 | Phase 2 | Complete |
+| PRXY-04 | Phase 2 | Complete |
 | PRXY-05 | Phase 2 | Pending |
 | PRXY-06 | Phase 2 | Pending |
 | PRXY-07 | Phase 2 | Pending |
