@@ -352,7 +352,6 @@ public class SqlRewriter {
 
         if (!modified) return originalSql;
 
-        logRewrite(originalSql, serialized);
         return serialized;
     }
 
