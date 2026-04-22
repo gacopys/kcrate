@@ -71,6 +71,11 @@ public class SqlRewriter {
             // Not a plain SELECT FOR UPDATE — fall through to DDL rules below
         }
 
+        // Preserve the truly original SQL before any pre-processing mutation (WR-02 fix).
+        // The sql variable may be reassigned below; logRewrite at the bottom must log the
+        // original input, not the pre-processed intermediate form.
+        final String originalSql = sql;
+
         // PRXY-09 + PRXY-10 pre-processing: JSQLParser 5.3 cannot parse CREATE INDEX statements
         // that contain PostgreSQL cast expressions (::type) or WHERE clauses (partial indexes).
         // Both must be stripped via regex BEFORE passing to JSQLParser to avoid D-01 parse failure.
@@ -123,8 +128,9 @@ public class SqlRewriter {
             if (result == null) return null;  // index swallowed entirely
         }
 
-        // D-02: log every rewrite
-        logRewrite(sql, result);
+        // D-02: log every rewrite — use originalSql so the log shows the true input,
+        // not the pre-processed intermediate that sql may have been reassigned to.
+        logRewrite(originalSql, result);
         return result;
     }
 
