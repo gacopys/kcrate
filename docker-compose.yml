@@ -111,11 +111,15 @@ services:
   # Keycloak -- starts after builder exits successfully and cratedb1 is healthy
   # -----------------------------------------------------------------------
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.5.2
     depends_on:
       proxy-builder:
         condition: service_completed_successfully
       cratedb1:
+        condition: service_healthy
+      cratedb2:
+        condition: service_healthy
+      cratedb3:
         condition: service_healthy
     volumes:
       - proxy-jar:/opt/keycloak/providers   # proxy JAR lands here; Keycloak scans at boot

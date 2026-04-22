@@ -66,7 +66,7 @@ status:
 
 verify:
 	@echo "--- builder exit code ---"
-	@docker compose ps proxy-builder | grep -q "Exited (0)" \
+	@docker compose ps -a proxy-builder | grep -q "Exited (0)" \
 		&& echo "PASS: proxy-builder exited 0" \
 		|| echo "FAIL: proxy-builder did not exit cleanly"
 	@echo "--- CrateDB node count ---"

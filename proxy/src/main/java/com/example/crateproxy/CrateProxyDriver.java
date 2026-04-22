@@ -15,12 +15,19 @@ import java.util.logging.Logger;
  */
 public class CrateProxyDriver implements Driver {
 
-    private static final Driver REAL = new org.postgresql.Driver();
+    private static final Driver REAL;
 
     static {
         try {
+            // Load pgJDBC so its Driver instance exists, then immediately deregister it.
+            // This prevents pgJDBC from winning jdbc:postgresql: URL dispatch before us.
+            Class.forName("org.postgresql.Driver");
+            Driver pgDriver = DriverManager.getDriver("jdbc:postgresql://localhost/");
+            DriverManager.deregisterDriver(pgDriver);
+            REAL = pgDriver;
+
             DriverManager.registerDriver(new CrateProxyDriver());
-        } catch (SQLException e) {
+        } catch (Exception e) {
             throw new ExceptionInInitializerError(e);
         }
     }
