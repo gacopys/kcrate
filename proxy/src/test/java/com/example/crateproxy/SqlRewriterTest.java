@@ -149,11 +149,103 @@ public class SqlRewriterTest {
         }
         if (!nextvalThrew) failures++;
 
+        System.out.println("\n--- Plan 3 Index + WITH Clause Tests ---");
+
+        // PRXY-09: Cast expression stripping from CREATE INDEX
+        String createIdxCast = "CREATE INDEX idx_usr_email ON user_entity (lower(email::varchar(250)))";
+        String castResult = SqlRewriter.rewrite(createIdxCast);
+        if (castResult == null) {
+            System.err.println("FAIL PRXY-09: CREATE INDEX was swallowed (should not be)");
+            failures++;
+        } else if (castResult.contains("::")) {
+            System.err.println("FAIL PRXY-09: Cast expression not stripped. Got: " + castResult);
+            failures++;
+        } else {
+            System.out.println("PASS PRXY-09: Cast expression stripped. Result: " + castResult);
+        }
+
+        // PRXY-10: Partial index WHERE clause stripping
+        String createIdxPartial = "CREATE INDEX idx_offline_css_preload ON offline_client_session (client_session_id) WHERE client_id != 'offline'";
+        String partialResult = SqlRewriter.rewrite(createIdxPartial);
+        if (partialResult == null) {
+            System.err.println("FAIL PRXY-10: CREATE INDEX was swallowed (should not be)");
+            failures++;
+        } else if (partialResult.toUpperCase().contains(" WHERE ")) {
+            System.err.println("FAIL PRXY-10: WHERE clause not stripped. Got: " + partialResult);
+            failures++;
+        } else {
+            System.out.println("PASS PRXY-10: WHERE clause stripped. Result: " + partialResult);
+        }
+
+        // PRXY-10 + PRXY-09 combined: cast AND partial WHERE in same index
+        String createIdxBoth = "CREATE INDEX idx_combined ON some_table (col::text) WHERE status != 'X'";
+        String bothResult = SqlRewriter.rewrite(createIdxBoth);
+        if (bothResult == null) {
+            System.err.println("FAIL PRXY-09+10 combined: CREATE INDEX swallowed");
+            failures++;
+        } else if (bothResult.contains("::") || bothResult.toUpperCase().contains(" WHERE ")) {
+            System.err.println("FAIL PRXY-09+10 combined: Cast or WHERE still present. Got: " + bothResult);
+            failures++;
+        } else {
+            System.out.println("PASS PRXY-09+10 combined: Cast and WHERE stripped. Result: " + bothResult);
+        }
+
+        // PRXY-11: CREATE TABLE WITH clause injection
+        String createSimple = "CREATE TABLE test_table (id VARCHAR(36) NOT NULL, name VARCHAR(255))";
+        String withResult = SqlRewriter.rewrite(createSimple);
+        if (withResult == null) {
+            System.err.println("FAIL PRXY-11: CREATE TABLE was swallowed (should not be)");
+            failures++;
+        } else if (!withResult.toUpperCase().contains("NUMBER_OF_REPLICAS")) {
+            System.err.println("FAIL PRXY-11: WITH clause not injected. Got: " + withResult);
+            failures++;
+        } else {
+            System.out.println("PASS PRXY-11: WITH clause injected. Result: " + withResult);
+        }
+
+        // PRXY-11: No duplicate WITH clause if already present (idempotency)
+        // Test by calling rewrite() twice — second call should not add another WITH
+        if (withResult != null) {
+            String withResult2 = SqlRewriter.rewrite(withResult);
+            if (withResult2 != null) {
+                int count = 0;
+                String upper2 = withResult2.toUpperCase();
+                int idx2 = 0;
+                while ((idx2 = upper2.indexOf("NUMBER_OF_REPLICAS", idx2)) != -1) {
+                    count++;
+                    idx2 += 1;
+                }
+                if (count > 1) {
+                    System.err.println("FAIL PRXY-11 idempotent: WITH clause added twice. Got: " + withResult2);
+                    failures++;
+                } else {
+                    System.out.println("PASS PRXY-11 idempotent: WITH clause not duplicated");
+                }
+            }
+        }
+
+        // Regression: ensure FK stripping + WITH clause work together (PRXY-05 + PRXY-11)
+        String createWithFkAndWith = "CREATE TABLE user_role_mapping2 (user_id VARCHAR(36) NOT NULL, "
+            + "role_id VARCHAR(36) NOT NULL, CONSTRAINT fk_c4fqv6p3oqd6scf FOREIGN KEY (user_id) REFERENCES keycloak_user(id))";
+        String combinedResult = SqlRewriter.rewrite(createWithFkAndWith);
+        if (combinedResult == null) {
+            System.err.println("FAIL combined: CREATE TABLE with FK was swallowed");
+            failures++;
+        } else if (combinedResult.toUpperCase().contains("FOREIGN KEY")) {
+            System.err.println("FAIL combined: FK not stripped. Got: " + combinedResult);
+            failures++;
+        } else if (!combinedResult.toUpperCase().contains("NUMBER_OF_REPLICAS")) {
+            System.err.println("FAIL combined: WITH clause missing. Got: " + combinedResult);
+            failures++;
+        } else {
+            System.out.println("PASS combined: FK stripped AND WITH clause injected. Result: " + combinedResult);
+        }
+
         if (failures > 0) {
             System.err.println("TOTAL FAILURES: " + failures);
             System.exit(1);
         } else {
-            System.out.println("ALL PLAN 1 AND PLAN 2 TESTS PASSED");
+            System.out.println("ALL PROXY REWRITE TESTS PASSED");
         }
     }
 
