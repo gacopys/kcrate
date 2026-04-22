@@ -28,7 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. CrateDB cluster shows 3 nodes joined and cluster health green (visible via CrateDB HTTP API or logs)
   3. Keycloak container starts and connects to CrateDB through the proxy JAR with no ClassNotFoundException in logs
   4. Proxy JAR is built automatically by a Maven builder service during compose startup — no manual build step required
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Create Maven proxy stub project and docker-compose.yml
+- [ ] 01-02-PLAN.md — Start stack and verify Phase 1 success criteria (human checkpoint)
 
 ### Phase 2: JDBC Proxy Implementation
 **Goal**: The proxy JAR intercepts all Keycloak/Liquibase SQL and rewrites it into CrateDB-compatible statements across all 9 rewrite layers
@@ -70,7 +74,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Bootstrap | 0/TBD | Not started | - |
+| 1. Infrastructure Bootstrap | 0/2 | Not started | - |
 | 2. JDBC Proxy Implementation | 0/TBD | Not started | - |
 | 3. Schema Migration | 0/TBD | Not started | - |
 | 4. Functional Validation + Cluster Resilience | 0/TBD | Not started | - |
