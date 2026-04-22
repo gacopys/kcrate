@@ -18,10 +18,10 @@
 - [x] **PRXY-02**: All 4 JDBC execution paths intercepted (Statement.execute, executeQuery, executeUpdate, PreparedStatement)
 - [x] **PRXY-03**: BEGIN / COMMIT / ROLLBACK swallowed silently (CrateDB rejects them at parse level)
 - [x] **PRXY-04**: SELECT FOR UPDATE stripped from all queries (Liquibase lock service issues this as the very first SQL)
-- [ ] **PRXY-05**: FOREIGN KEY constraints stripped from CREATE TABLE DDL (195 FK additions in Keycloak schema)
-- [ ] **PRXY-06**: UNIQUE constraints stripped from DDL (63 unique constraint additions)
-- [ ] **PRXY-07**: Unsupported types remapped — CLOB→TEXT, NCLOB→TEXT, BINARY(64)→BLOB, TINYBLOB→BLOB, NVARCHAR→VARCHAR, TINYINT→SMALLINT
-- [ ] **PRXY-08**: ALTER TABLE / ALTER COLUMN unsupported operations stripped (56 column type changes, 34 NOT NULL additions)
+- [x] **PRXY-05**: FOREIGN KEY constraints stripped from CREATE TABLE DDL (195 FK additions in Keycloak schema)
+- [x] **PRXY-06**: UNIQUE constraints stripped from DDL (63 unique constraint additions)
+- [x] **PRXY-07**: Unsupported types remapped — CLOB→TEXT, NCLOB→TEXT, BINARY(64)→BLOB, TINYBLOB→BLOB, NVARCHAR→VARCHAR, TINYINT→SMALLINT
+- [x] **PRXY-08**: ALTER TABLE / ALTER COLUMN unsupported operations stripped (56 column type changes, 34 NOT NULL additions)
 - [ ] **PRXY-09**: PostgreSQL cast expressions (::varchar) stripped from CREATE INDEX DDL
 - [ ] **PRXY-10**: Partial index WHERE clauses stripped from CREATE INDEX DDL (Keycloak v26.5+ changesets)
 - [ ] **PRXY-11**: CREATE TABLE statements rewritten to include `WITH (number_of_replicas = '1')` for cluster replication
@@ -82,10 +82,10 @@
 | PRXY-02 | Phase 2 | Complete |
 | PRXY-03 | Phase 2 | Complete |
 | PRXY-04 | Phase 2 | Complete |
-| PRXY-05 | Phase 2 | Pending |
-| PRXY-06 | Phase 2 | Pending |
-| PRXY-07 | Phase 2 | Pending |
-| PRXY-08 | Phase 2 | Pending |
+| PRXY-05 | Phase 2 | Complete |
+| PRXY-06 | Phase 2 | Complete |
+| PRXY-07 | Phase 2 | Complete |
+| PRXY-08 | Phase 2 | Complete |
 | PRXY-09 | Phase 2 | Pending |
 | PRXY-10 | Phase 2 | Pending |
 | PRXY-11 | Phase 2 | Pending |

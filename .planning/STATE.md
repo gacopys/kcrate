@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-jdbc-proxy-implementation plan 01 (JDBC interception chain)
-last_updated: "2026-04-22T10:16:05.303Z"
+stopped_at: Completed 02-jdbc-proxy-implementation plan 02 (DDL rewrite rules)
+last_updated: "2026-04-22T10:22:13.640Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 ## Current Position
 
 Phase: 02 (jdbc-proxy-implementation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-22
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 5 | 2 tasks | 4 files |
 | Phase 02-jdbc-proxy-implementation P01 | 25 | 2 tasks | 7 files |
+| Phase 02-jdbc-proxy-implementation P02 | 4 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Keycloak runs in start-dev mode to avoid TLS/cert requirements for PoC
 - [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 stores FOR UPDATE on Select class (not PlainSelect) — use select.getForMode()/setForMode()
 - [Phase 02-jdbc-proxy-implementation]: D-01 enforced in Plan 1: all non-transaction SQL parsed through JSQLParser for parse-fail detection and Plans 2-3 hook point
+- [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 Index uses getType() not getIndexType(); ForeignKeyIndex is typed subclass for reliable FK detection
+- [Phase 02-jdbc-proxy-implementation]: JSQLParser 5.3 embeds length in type name token (BINARY (64)) — base type extracted via split on space/paren before switch
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T10:16:05.300Z
-Stopped at: Completed 02-jdbc-proxy-implementation plan 01 (JDBC interception chain)
+Last session: 2026-04-22T10:22:13.638Z
+Stopped at: Completed 02-jdbc-proxy-implementation plan 02 (DDL rewrite rules)
 Resume file: None

@@ -47,7 +47,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — JDBC wrappers (CrateProxyConnection/Statement/PreparedStatement) + transaction swallowing + SELECT FOR UPDATE stripping
-- [ ] 02-02-PLAN.md — DDL rewrites: FK/UNIQUE stripping, type remapping (CLOB/NCLOB/BINARY/TINYBLOB/NVARCHAR/TINYINT), ALTER TABLE unsupported op stripping, CREATE/ALTER SEQUENCE swallowing
+- [x] 02-02-PLAN.md — DDL rewrites: FK/UNIQUE stripping, type remapping (CLOB/NCLOB/BINARY/TINYBLOB/NVARCHAR/TINYINT), ALTER TABLE unsupported op stripping, CREATE/ALTER SEQUENCE swallowing
 - [ ] 02-03-PLAN.md — Index DDL rewrites: ::type cast stripping, partial index WHERE stripping, CREATE TABLE WITH clause injection
 
 ### Phase 3: Schema Migration
@@ -80,6 +80,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Bootstrap | 1/2 | In Progress|  |
-| 2. JDBC Proxy Implementation | 1/3 | In Progress|  |
+| 2. JDBC Proxy Implementation | 2/3 | In Progress|  |
 | 3. Schema Migration | 0/TBD | Not started | - |
 | 4. Functional Validation + Cluster Resilience | 0/TBD | Not started | - |
