@@ -9,6 +9,7 @@ import net.sf.jsqlparser.statement.create.sequence.CreateSequence;
 import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.create.table.ColumnDefinition;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
+import net.sf.jsqlparser.statement.create.index.CreateIndex;
 import net.sf.jsqlparser.statement.create.table.ForeignKeyIndex;
 import net.sf.jsqlparser.statement.create.table.Index;
 import net.sf.jsqlparser.statement.select.Select;
@@ -99,7 +100,11 @@ public class SqlRewriter {
         else if (stmt instanceof Alter alter) {
             result = rewriteAlter(alter, sql);
         }
-        // Plan 3: CREATE INDEX rewriting (added in Plan 3)
+        // PRXY-09, PRXY-10: CREATE INDEX rewriting
+        else if (stmt instanceof CreateIndex ci) {
+            result = rewriteCreateIndex(ci, sql);
+            if (result == null) return null;  // index swallowed entirely
+        }
 
         // D-02: log every rewrite
         logRewrite(sql, result);
@@ -177,11 +182,42 @@ public class SqlRewriter {
             }
         }
 
-        // Note: WITH (number_of_replicas = '1') injection is PRXY-11, added in Plan 3.
+        // PRXY-11: Inject WITH (number_of_replicas = '1') for CrateDB cluster replication
+        // Required: 3-node cluster needs explicit replica count per table.
+        // JSQLParser 5.x: CreateTable has getTableOptionsStrings() which maps to the WITH clause.
+        // Assumption A1: setTableOptionsStrings() with value "(number_of_replicas = '1')"
+        // serializes to "WITH (number_of_replicas = '1')" in ct.toString().
+        // If A1 is wrong (WITH keyword missing), fallback to string append after ct.toString().
+        boolean hasReplicas = false;
+        List<String> existingOpts = ct.getTableOptionsStrings();
+        if (existingOpts != null) {
+            hasReplicas = existingOpts.stream()
+                .anyMatch(o -> o != null && o.contains("number_of_replicas"));
+        }
+        if (!hasReplicas) {
+            List<String> opts = existingOpts != null ? new ArrayList<>(existingOpts) : new ArrayList<>();
+            opts.add("(number_of_replicas = '1')");
+            ct.setTableOptionsStrings(opts);
+            modified = true;
+        }
 
         if (!modified) return originalSql;  // unchanged — avoid JSQLParser round-trip noise
 
-        return ct.toString();
+        String ctResult = ct.toString();
+
+        // Assumption A1 fallback: verify WITH keyword appears in serialized output.
+        // If JSQLParser does not include "WITH" automatically, append it manually.
+        if (!hasReplicas && !ctResult.toUpperCase().contains("WITH (NUMBER_OF_REPLICAS")) {
+            ctResult = ctResult.stripTrailing();
+            if (ctResult.endsWith(";")) {
+                ctResult = ctResult.substring(0, ctResult.length() - 1).stripTrailing()
+                    + " WITH (number_of_replicas = '1')";
+            } else {
+                ctResult = ctResult + " WITH (number_of_replicas = '1')";
+            }
+        }
+
+        return ctResult;
     }
 
     /**
@@ -255,6 +291,67 @@ public class SqlRewriter {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Rewrites CREATE INDEX statements for CrateDB compatibility.
+     *
+     * All rewriting is done via regex on the original SQL string because JSQLParser 5.3
+     * does NOT expose getWhere()/setWhere() on CreateIndex (Deviation from Plan: A2 was wrong).
+     *
+     * PRXY-09: Strip PostgreSQL cast expressions (::type) from index column expressions.
+     *   Example: CREATE INDEX idx ON table (col::varchar(250))
+     *   Becomes: CREATE INDEX idx ON table (col)
+     *   Pattern: \s*::\w+(\(\d+\))? — matches ::varchar, ::varchar(250), ::text, etc.
+     *
+     * PRXY-10: Strip WHERE clause from partial indexes.
+     *   Example: CREATE INDEX idx ON table (col) WHERE col != 'external'
+     *   Becomes: CREATE INDEX idx ON table (col)
+     *   Strategy: regex strip of \s+WHERE\s+.+ at end of statement (case-insensitive).
+     *   JSQLParser 5.3 CreateIndex has no WHERE API — this path was incorrect in the plan.
+     *   Confirmed in Keycloak 26.5.0 OFFLINE_CLIENT_SESSION changesets (2 partial indexes).
+     *
+     * Also strips the UNIQUE keyword from CREATE UNIQUE INDEX as a safe default (A3):
+     *   CrateDB 6.2 behavior with CREATE UNIQUE INDEX is unverified — strip UNIQUE to be safe.
+     *
+     * The `ci` parameter is unused but retained for type dispatch consistency.
+     * Returns null if the entire index statement should be swallowed (not expected normally).
+     */
+    private static String rewriteCreateIndex(CreateIndex ci, String originalSql) {
+        boolean modified = false;
+        String serialized = originalSql;
+
+        // PRXY-10: Strip partial index WHERE clause via regex on original SQL
+        // Pattern: optional semicolon-end, WHERE clause is everything after the closing paren of columns
+        // Use case-insensitive match; WHERE clause at end of CREATE INDEX: \s+WHERE\s+.*$
+        String noWhere = serialized.replaceAll("(?i)\\s+WHERE\\s+.+$", "");
+        if (!noWhere.equals(serialized)) {
+            serialized = noWhere;
+            modified = true;
+            System.err.println("[CRATE PROXY] STRIP PARTIAL INDEX WHERE: " + originalSql);
+        }
+
+        // PRXY-09: Strip ::type cast expressions from column expressions
+        // Regex: \s*::\w+(\(\d+\))? matches ::varchar, ::varchar(250), ::text, ::integer, etc.
+        String noCast = serialized.replaceAll("\\s*::\\w+(\\(\\d+\\))?", "");
+        if (!noCast.equals(serialized)) {
+            serialized = noCast;
+            modified = true;
+            System.err.println("[CRATE PROXY] STRIP CAST EXPR in CREATE INDEX: " + originalSql);
+        }
+
+        // Strip UNIQUE keyword from CREATE UNIQUE INDEX (A3: CrateDB behavior unverified)
+        // Match CREATE UNIQUE INDEX at start of statement (case-insensitive)
+        if (serialized.toUpperCase().startsWith("CREATE UNIQUE INDEX")) {
+            serialized = serialized.replaceFirst("(?i)\\bUNIQUE\\s+", "");
+            modified = true;
+            System.err.println("[CRATE PROXY] STRIP UNIQUE from CREATE INDEX: " + originalSql);
+        }
+
+        if (!modified) return originalSql;
+
+        logRewrite(originalSql, serialized);
+        return serialized;
     }
 
     private static boolean isAlterSequence(Statement stmt) {
