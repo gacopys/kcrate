@@ -91,13 +91,10 @@ services:
       start_period: 30s
 
   # -----------------------------------------------------------------------
-  # Caddy load balancer
+  # Caddy load balancers (CrateDB-facing)
   # -----------------------------------------------------------------------
   caddy:
     build: ./caddy
-    ports:
-      - "4200:4200"
-      - "5432:5432"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
@@ -107,3 +104,42 @@ services:
         condition: service_healthy
       cratedb3:
         condition: service_healthy
+
+  caddy2:
+    build: ./caddy
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      cratedb1:
+        condition: service_healthy
+      cratedb2:
+        condition: service_healthy
+      cratedb3:
+        condition: service_healthy
+
+  caddy3:
+    build: ./caddy
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      cratedb1:
+        condition: service_healthy
+      cratedb2:
+        condition: service_healthy
+      cratedb3:
+        condition: service_healthy
+
+  # -----------------------------------------------------------------------
+  # Caddy top-level load balancer (host-facing)
+  # -----------------------------------------------------------------------
+  caddy-lb:
+    build: ./caddy
+    ports:
+      - "4200:4200"
+      - "5432:5432"
+    volumes:
+      - ./caddy-lb/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - caddy
+      - caddy2
+      - caddy3
