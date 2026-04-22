@@ -14,7 +14,7 @@ help:
 	@echo ""
 	@echo "Status / verification"
 	@echo "  status        Show container states"
-	@echo "  verify        Run all Phase 1 acceptance checks"
+	@echo "  verify        Run all Phase 2 acceptance checks"
 	@echo "  nodes         Query CrateDB cluster node count"
 	@echo "  proxy-check   Confirm KC_DB_DRIVER and proxy-jar volume are wired"
 	@echo ""
@@ -65,25 +65,56 @@ status:
 	docker compose ps
 
 verify:
-	@echo "--- builder exit code ---"
-	@docker compose ps -a proxy-builder | grep -q "Exited (0)" \
+	@echo "=== Phase 2 verification: JDBC Proxy Implementation ==="
+	@echo ""
+	@echo "--- [1/6] proxy-builder exited 0 ---"
+	@docker compose ps -a proxy-builder 2>/dev/null | grep -q "Exited (0)" \
 		&& echo "PASS: proxy-builder exited 0" \
-		|| echo "FAIL: proxy-builder did not exit cleanly"
-	@echo "--- CrateDB node count ---"
+		|| echo "FAIL: proxy-builder did not exit cleanly  →  run: make up"
+	@echo "--- [2/6] proxy JAR in volume (>1 MB, shaded) ---"
+	@docker run --rm -v crate_proxy-jar:/vol alpine \
+		sh -c 'S=$$(stat -c%s /vol/crate-proxy.jar 2>/dev/null || echo 0); \
+		       [ "$$S" -gt 1048576 ] \
+		         && echo "PASS: crate-proxy.jar present ($$S bytes)" \
+		         || echo "FAIL: missing or <1 MB ($$S bytes)  →  run: make rebuild"'
+	@echo "--- [3/6] all 5 proxy classes in JAR ---"
+	@docker run --rm -v crate_proxy-jar:/vol alpine \
+		sh -c 'apk add -q --no-cache unzip >/dev/null 2>&1; \
+		       C=$$(unzip -l /vol/crate-proxy.jar 2>/dev/null \
+		              | grep -cE "crateproxy/(CrateProxyDriver|CrateProxyConnection|CrateProxyStatement|CrateProxyPreparedStatement|SqlRewriter)\.class"); \
+		       [ "$$C" -eq 5 ] \
+		         && echo "PASS: all 5 proxy classes present" \
+		         || echo "FAIL: found $$C/5 classes  →  run: make rebuild"'
+	@echo "--- [4/6] SqlRewriterTest: all 9 rewrite rules ---"
+	@if docker compose exec -T keycloak true 2>/dev/null; then \
+		docker compose exec -T keycloak \
+			java -cp /opt/keycloak/providers/crate-proxy.jar \
+			com.example.crateproxy.SqlRewriterTest 2>&1 \
+			| grep -qF "ALL PROXY REWRITE TESTS PASSED" \
+			&& echo "PASS: ALL PROXY REWRITE TESTS PASSED" \
+			|| echo "FAIL: rewrite tests failed  →  run: docker compose exec keycloak java -cp /opt/keycloak/providers/crate-proxy.jar com.example.crateproxy.SqlRewriterTest"; \
+	else \
+		echo "SKIP: Keycloak not running  →  run: make up"; \
+	fi
+	@echo "--- [5/6] CrateDB 3-node cluster ---"
 	@NODES=$$(curl -sf -X POST $(CRATE_URL) \
 		-H "Content-Type: application/json" \
 		-d '{"stmt":"SELECT count(*) FROM sys.nodes"}' \
 		| python3 -c "import sys,json; d=json.load(sys.stdin); print(d['rows'][0][0])" 2>/dev/null); \
-	[ -n "$$NODES" ] \
-		&& echo "PASS: $$NODES CrateDB node(s) responding" \
-		|| echo "FAIL: CrateDB not responding on port 4200"
-	@echo "--- Keycloak ClassNotFoundException ---"
+	[ "$$NODES" = "3" ] \
+		&& echo "PASS: 3 CrateDB nodes in cluster" \
+		|| echo "FAIL: expected 3 nodes, got '$$NODES'  →  CrateDB not running or cluster not formed"
+	@echo "--- [6/6] no ClassNotFoundException in Keycloak logs ---"
 	@FOUND=$$(docker compose logs keycloak 2>&1 | grep -ic "classnotfound"); \
 	[ "$$FOUND" -eq 0 ] \
 		&& echo "PASS: no ClassNotFoundException in Keycloak logs" \
-		|| echo "FAIL: $$FOUND ClassNotFoundException line(s) in Keycloak logs"
-	@echo "--- Provider load evidence ---"
-	@docker compose logs keycloak 2>&1 | grep -i "provider\|crateproxy\|crate-proxy" | head -5 || echo "(no provider lines found)"
+		|| echo "FAIL: $$FOUND ClassNotFoundException line(s) found"
+	@echo ""
+	@echo "--- proxy rewrite activity (last 5 [CRATE PROXY] lines) ---"
+	@docker compose logs keycloak 2>&1 | grep "\[CRATE PROXY\]" | tail -5 \
+		|| echo "(none yet — stack may not have started Liquibase migration)"
+	@echo ""
+	@echo "=== done ==="
 
 nodes:
 	@curl -sf -X POST $(CRATE_URL) \
