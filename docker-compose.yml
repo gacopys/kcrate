@@ -15,9 +15,6 @@ services:
       -Cgateway.expected_data_nodes=3
       -Cgateway.recover_after_data_nodes=2
       -Cnode.name=cratedb1
-    ports:
-      - "4200:4200"    # CrateDB admin UI (host debugging)
-      - "5432:5432"    # PostgreSQL wire protocol (host debugging)
     healthcheck:
       test:
         - "CMD"
@@ -92,3 +89,21 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # -----------------------------------------------------------------------
+  # Caddy load balancer
+  # -----------------------------------------------------------------------
+  caddy:
+    build: ./caddy
+    ports:
+      - "4200:4200"
+      - "5432:5432"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      cratedb1:
+        condition: service_healthy
+      cratedb2:
+        condition: service_healthy
+      cratedb3:
+        condition: service_healthy

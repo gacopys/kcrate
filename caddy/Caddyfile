@@ -1,0 +1,22 @@
+{
+    auto_https off
+
+    layer4 {
+        :5432 {
+            route {
+                proxy {
+                    upstream cratedb1:5432
+                    upstream cratedb2:5432
+                    upstream cratedb3:5432
+                }
+            }
+        }
+    }
+}
+
+:4200 {
+    reverse_proxy cratedb1:4200 cratedb2:4200 cratedb3:4200 {
+        lb_policy round_robin
+        fail_duration 10s
+    }
+}

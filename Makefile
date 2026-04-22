@@ -1,4 +1,4 @@
-.PHONY: up down restart clean logs shell-crate
+.PHONY: up down restart clean logs stop1 stop2 stop3 start1 start2 start3 shell-crate
 
 CRATE_URL := http://localhost:4200/_sql
 
@@ -23,6 +23,28 @@ clean:
 
 logs:
 	docker compose logs -f
+
+# ---------------------------------------------------------------------------
+# Node control (simulates node failure/recovery)
+# ---------------------------------------------------------------------------
+
+stop1:
+	docker compose stop cratedb1
+
+stop2:
+	docker compose stop cratedb2
+
+stop3:
+	docker compose stop cratedb3
+
+start1:
+	docker compose start cratedb1
+
+start2:
+	docker compose start cratedb2
+
+start3:
+	docker compose start cratedb3
 
 # ---------------------------------------------------------------------------
 # Debug
