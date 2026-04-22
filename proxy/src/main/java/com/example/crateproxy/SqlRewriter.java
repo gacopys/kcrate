@@ -285,6 +285,18 @@ public class SqlRewriter {
             case "TINYINT":
                 dt.setDataType("SMALLINT");
                 return true;
+            case "BYTEA":
+                dt.setDataType("TEXT");
+                dt.setArgumentsStringList(null);
+                return true;
+            case "UUID":
+                dt.setDataType("TEXT");
+                dt.setArgumentsStringList(null);
+                return true;
+            case "JSONB":
+                dt.setDataType("OBJECT");
+                dt.setArgumentsStringList(null);
+                return true;
             case "TEXT":
                 // Strip spurious length parameter: TEXT(25500) → TEXT
                 // May appear as "TEXT (25500)" in the type name token or as separate args
