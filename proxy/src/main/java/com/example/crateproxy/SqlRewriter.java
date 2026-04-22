@@ -107,8 +107,10 @@ public class SqlRewriter {
             return null;
         }
 
-        // D-04: nextval() in any surviving statement is forbidden
-        if (sql.toLowerCase().contains("nextval(")) {
+        // D-04: nextval() in SELECT context is forbidden (CrateDB has no sequences).
+        // Scoped to Select statements only to avoid false-positives on INSERT/UPDATE statements
+        // where column values might contain the text "nextval(" in a string literal.
+        if (stmt instanceof Select && sql.toLowerCase().contains("nextval(")) {
             throw new SQLException("CRATE PROXY: nextval() not supported: " + sql);
         }
 
