@@ -1,20 +1,6 @@
 services:
 
   # -----------------------------------------------------------------------
-  # One-shot Maven builder: compiles fat JAR into shared volume then exits
-  # -----------------------------------------------------------------------
-  proxy-builder:
-    image: maven:3.9-eclipse-temurin-21
-    working_dir: /build
-    volumes:
-      - ./proxy:/build               # proxy source
-      - proxy-jar:/output          # output volume: JAR written here
-      - maven-cache:/root/.m2      # dependency cache across runs
-    command: >
-      sh -c "mvn package -q -DskipTests
-      && cp target/crate-proxy-1.0-SNAPSHOT.jar /output/crate-proxy.jar"
-
-  # -----------------------------------------------------------------------
   # CrateDB 3-node cluster
   # -----------------------------------------------------------------------
   cratedb1:
@@ -106,35 +92,3 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-
-  # -----------------------------------------------------------------------
-  # Keycloak -- starts after builder exits successfully and cratedb1 is healthy
-  # -----------------------------------------------------------------------
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.5.2
-    depends_on:
-      proxy-builder:
-        condition: service_completed_successfully
-      cratedb1:
-        condition: service_healthy
-      cratedb2:
-        condition: service_healthy
-      cratedb3:
-        condition: service_healthy
-    volumes:
-      - proxy-jar:/opt/keycloak/providers   # proxy JAR lands here; Keycloak scans at boot
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://cratedb1:5432,cratedb2:5432,cratedb3:5432/doc?loadBalanceHosts=true
-      KC_DB_USERNAME: crate
-      KC_DB_PASSWORD: ""
-      KC_DB_DRIVER: com.example.crateproxy.CrateProxyDriver
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-    ports:
-      - "8080:8080"
-    command: start-dev
-
-volumes:
-  proxy-jar:
-  maven-cache:
