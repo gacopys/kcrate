@@ -1,3 +1,5 @@
+.PHONY: up down restart clean logs shell-crate
+
 CRATE_URL := http://localhost:4200/_sql
 
 # ---------------------------------------------------------------------------
@@ -5,27 +7,12 @@ CRATE_URL := http://localhost:4200/_sql
 # ---------------------------------------------------------------------------
 
 up:
-	@echo "==> [1/2] Building proxy JAR (foreground — errors visible)"
-	docker compose up proxy-builder
-	@docker compose ps -a proxy-builder | grep -q "Exited (0)" \
-		|| (echo "ERROR: proxy-builder failed — run 'make builder-logs'"; exit 1)
-	@echo "==> [2/2] Starting CrateDB cluster + Keycloak"
-	docker compose up -d cratedb1 cratedb2 cratedb3 keycloak
+	docker compose up -d
 
 down:
 	docker compose down
 
 restart: down up
-
-rebuild:
-	docker compose down
-	docker volume rm crate_proxy-jar 2>/dev/null || true
-	@echo "==> [1/2] Building proxy JAR"
-	docker compose up proxy-builder
-	@docker compose ps -a proxy-builder | grep -q "Exited (0)" \
-		|| (echo "ERROR: proxy-builder failed — run 'make builder-logs'"; exit 1)
-	@echo "==> [2/2] Starting CrateDB cluster + Keycloak"
-	docker compose up -d cratedb1 cratedb2 cratedb3 keycloak
 
 clean:
 	docker compose down -v
@@ -36,9 +23,6 @@ clean:
 
 logs:
 	docker compose logs -f
-
-builder-logs:
-	docker compose logs proxy-builder
 
 # ---------------------------------------------------------------------------
 # Debug
