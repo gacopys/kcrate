@@ -17,6 +17,7 @@ import net.sf.jsqlparser.statement.select.Select;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +32,11 @@ import java.util.stream.Collectors;
  *   D-04: nextval() throws SQLException (added in Plan 2)
  */
 public class SqlRewriter {
+
+    // CrateDB reserved keywords that appear as column names in Keycloak DDL and must be quoted.
+    // INPUT is reserved because CrateDB uses it in COPY ... (INPUT) stream syntax.
+    // Add others here as discovered during migration testing.
+    private static final Set<String> CRATE_RESERVED_AS_COLUMN = Set.of("INPUT");
 
     /**
      * Rewrite sql for CrateDB compatibility.
@@ -54,6 +60,82 @@ public class SqlRewriter {
         // Must be intercepted before any DDL handling or CrateDB rejects it.
         // In JSQLParser 5.3, FOR UPDATE properties live on the Select statement, not PlainSelect.
         String upper = trimmed.toUpperCase();
+
+        // Rule 1c: Replace unsupported pg_catalog system function queries with an empty result.
+        // Liquibase precondition checks (indexExists, tableExists, etc.) call pg_catalog functions
+        // that CrateDB does not implement. Returning an empty result causes Liquibase to evaluate
+        // the precondition as "object does not exist", triggering onFail="MARK_RAN" to skip the
+        // changeset gracefully instead of halting on error (onError default = HALT).
+        if (upper.contains("PG_CATALOG.") || upper.contains("PG_GET_INDEXDEF")) {
+            System.err.println("[CRATE PROXY] REPLACE pg_catalog query with empty result: " + sql);
+            return "SELECT 1 WHERE 1=0";
+        }
+
+        // Rule 1b: Pass through or pre-process statements that JSQLParser cannot parse.
+        // ALTER TABLE ... RENAME COLUMN: CrateDB 6.2+ supports this natively. JSQLParser fails
+        // when the old column name is a datetime keyword token (e.g. TIME, TIMESTAMP).
+        if (upper.matches("(?s)ALTER\\s+TABLE\\s+\\S+\\s+RENAME\\s+COLUMN\\b.*")) {
+            System.err.println("[CRATE PROXY] PASS THROUGH RENAME COLUMN: " + sql);
+            return sql;
+        }
+
+        // ALTER TABLE ... DROP COLUMN: CrateDB supports this natively. JSQLParser fails when
+        // the column name is a keyword token (e.g. ACTION). Pass through verbatim.
+        if (upper.matches("(?s)ALTER\\s+TABLE\\s+\\S+\\s+DROP\\s+COLUMN\\b.*")) {
+            System.err.println("[CRATE PROXY] PASS THROUGH DROP COLUMN: " + sql);
+            return sql;
+        }
+
+        // ALTER TABLE ... ADD col UNSUPPORTED_TYPE: remap types before parsing. This covers the
+        // same types as remapColumnType() in CREATE TABLE but applied via string substitution
+        // since JSQLParser's AlterExpression API does not expose column definitions directly.
+        if (upper.startsWith("ALTER TABLE") && upper.contains(" ADD ")) {
+            String fixed = sql
+                .replaceAll("(?i)\\bBYTEA\\b", "TEXT")
+                .replaceAll("(?i)\\bUUID\\b", "TEXT")
+                .replaceAll("(?i)\\bJSONB\\b", "OBJECT")
+                .replaceAll("(?i)\\bTINYBLOB\\b", "BLOB")
+                .replaceAll("(?i)\\bNCLOB\\b", "TEXT")
+                .replaceAll("(?i)\\bCLOB\\b", "TEXT")
+                .replaceAll("(?i)\\bNVARCHAR\\b", "VARCHAR")
+                .replaceAll("(?i)\\bTINYINT\\b", "SMALLINT");
+            if (!fixed.equals(sql)) {
+                logRewrite(sql, fixed);
+                sql = fixed;
+                trimmed = sql.trim();
+                upper = trimmed.toUpperCase();
+            }
+        }
+
+        // ALTER TABLE ... ALTER COLUMN ... TYPE ... USING (...): PostgreSQL cast in USING clause
+        // causes JSQLParser failure. We swallow all ALTER COLUMN TYPE ops anyway (CrateDB does
+        // not support column type modification), so intercept before parsing.
+        if (upper.matches("(?s)ALTER\\s+TABLE\\s+\\S+\\s+ALTER\\s+COLUMN\\b.*\\bTYPE\\b.*")) {
+            System.err.println("[CRATE PROXY] SWALLOW ALTER COLUMN TYPE (pre-parse): " + sql);
+            return null;
+        }
+
+        // CREATE INDEX: CrateDB does not support standalone CREATE INDEX — swallow before parsing.
+        // Pre-parse interception avoids JSQLParser failures on PostgreSQL cast expressions like
+        // (col::varchar(250)) in index column lists.
+        if (upper.matches("(?s)CREATE\\s+(UNIQUE\\s+)?INDEX\\b.*")) {
+            System.err.println("[CRATE PROXY] SWALLOW CREATE INDEX (pre-parse): " + sql);
+            return null;
+        }
+
+        // DROP INDEX: CrateDB does not support standalone indexes, so DROP INDEX always fails.
+        // Swallow silently — indexes were never created, nothing to drop.
+        if (upper.matches("(?s)DROP\\s+INDEX\\b.*")) {
+            System.err.println("[CRATE PROXY] SWALLOW DROP INDEX: " + sql);
+            return null;
+        }
+
+        // DROP TABLE ... CASCADE: CrateDB does not support CASCADE on DROP TABLE. Strip it.
+        if (upper.matches("(?s)DROP\\s+TABLE\\b.*\\bCASCADE\\s*;?\\s*")) {
+            String rewritten = trimmed.replaceAll("(?i)\\s+CASCADE\\s*;?\\s*$", "");
+            logRewrite(sql, rewritten);
+            return rewritten;
+        }
         if (upper.contains("FOR UPDATE")) {
             Statement stmt = parseSql(sql);
             if (stmt instanceof Select select) {
@@ -124,10 +206,12 @@ public class SqlRewriter {
         else if (stmt instanceof Alter alter) {
             result = rewriteAlter(alter, sql);
         }
-        // PRXY-09, PRXY-10: CREATE INDEX rewriting
-        else if (stmt instanceof CreateIndex ci) {
-            result = rewriteCreateIndex(ci, sql);
-            if (result == null) return null;  // index swallowed entirely
+        // CREATE INDEX: CrateDB does not support standalone CREATE INDEX statements at all
+        // ("no viable alternative at input 'CREATE INDEX'"). Swallow every CREATE INDEX
+        // regardless of content — CrateDB uses columnar storage, not B-tree indexes.
+        else if (stmt instanceof CreateIndex) {
+            System.err.println("[CRATE PROXY] SWALLOW CREATE INDEX (not supported by CrateDB): " + sql);
+            return null;
         }
 
         // D-02: log every rewrite — use originalSql so the log shows the true input,
@@ -199,9 +283,17 @@ public class SqlRewriter {
         }
 
         // PRXY-07: Remap unsupported column types
+        // Also quote any column names that are CrateDB reserved keywords.
+        // Quoted names use lowercase so that unquoted references in DML (which fold to
+        // lowercase in CrateDB) still resolve correctly.
         if (ct.getColumnDefinitions() != null) {
             for (ColumnDefinition col : ct.getColumnDefinitions()) {
                 if (remapColumnType(col)) {
+                    modified = true;
+                }
+                String colName = col.getColumnName();
+                if (colName != null && CRATE_RESERVED_AS_COLUMN.contains(colName.toUpperCase().replace("\"", ""))) {
+                    col.setColumnName("\"" + colName.toLowerCase().replace("\"", "") + "\"");
                     modified = true;
                 }
             }
@@ -459,10 +551,17 @@ public class SqlRewriter {
                 if (expr.getUk()) {
                     return true;  // UNIQUE constraint
                 }
-                // Fallback: check string representation for FOREIGN KEY or UNIQUE keyword
+                // ADD CONSTRAINT ... PRIMARY KEY: CrateDB does not support the CONSTRAINT name
+                // clause in ALTER TABLE ADD PRIMARY KEY. Swallow entirely for PoC — CrateDB
+                // tables without a declared PK fall back to the hidden _id routing column.
+                if (expr.getIndex() != null && "PRIMARY KEY".equalsIgnoreCase(expr.getIndex().getType())) {
+                    return true;
+                }
+                // Fallback: check string representation for FOREIGN KEY, UNIQUE, or PRIMARY KEY
                 {
                     String exprStr = expr.toString().toUpperCase();
-                    if (exprStr.contains("FOREIGN KEY") || exprStr.contains(" UNIQUE")) {
+                    if (exprStr.contains("FOREIGN KEY") || exprStr.contains(" UNIQUE")
+                            || exprStr.contains("PRIMARY KEY")) {
                         return true;
                     }
                 }

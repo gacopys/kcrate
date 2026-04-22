@@ -15,6 +15,9 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
@@ -189,7 +192,45 @@ public class CrateProxyConnection implements Connection {
 
     @Override
     public DatabaseMetaData getMetaData() throws SQLException {
-        return real.getMetaData();
+        DatabaseMetaData realMeta = real.getMetaData();
+        // Wrap DatabaseMetaData to intercept getIndexInfo: pgJDBC's implementation calls
+        // pg_catalog.pg_get_indexdef which CrateDB doesn't support. Returning an empty
+        // ResultSet causes Liquibase to evaluate indexExists preconditions as false,
+        // triggering onFail="MARK_RAN" instead of halting with onError=HALT.
+        InvocationHandler handler = (proxy, method, args) -> {
+            String mName = method.getName();
+            // Intercept catalog-introspection methods that pgJDBC implements via pg_catalog
+            // queries CrateDB does not support. Return an empty ResultSet so Liquibase
+            // evaluates all existence-preconditions as "object does not exist", triggering
+            // onFail="MARK_RAN" to skip changesets gracefully.
+            // getIndexInfo: pgJDBC calls pg_catalog.pg_get_indexdef — unsupported by CrateDB
+            // getColumns: pgJDBC calls pg_catalog.pg_attribute — may return 0-column ResultSet
+            if ("getIndexInfo".equals(mName) || "getColumns".equals(mName)) {
+                try {
+                    ResultSet rs = (ResultSet) method.invoke(realMeta, args);
+                    // If ResultSet has 0 columns the JDBC spec was violated — replace with empty
+                    if (rs != null && rs.getMetaData().getColumnCount() == 0) {
+                        rs.close();
+                        System.err.println("[CRATE PROXY] " + mName + " returned 0-column ResultSet, replacing with empty");
+                        return real.createStatement().executeQuery("SELECT 1 WHERE 1=0");
+                    }
+                    return rs;
+                } catch (Exception e) {
+                    System.err.println("[CRATE PROXY] " + mName + " failed (" + e.getMessage() + "), returning empty ResultSet");
+                    return real.createStatement().executeQuery("SELECT 1 WHERE 1=0");
+                }
+            }
+            try {
+                return method.invoke(realMeta, args);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw e.getCause() != null ? e.getCause() : e;
+            }
+        };
+        return (DatabaseMetaData) Proxy.newProxyInstance(
+            DatabaseMetaData.class.getClassLoader(),
+            new Class<?>[]{ DatabaseMetaData.class },
+            handler
+        );
     }
 
     @Override
