@@ -71,6 +71,23 @@ public class SqlRewriter {
             // Not a plain SELECT FOR UPDATE — fall through to DDL rules below
         }
 
+        // PRXY-09 + PRXY-10 pre-processing: JSQLParser 5.3 cannot parse CREATE INDEX statements
+        // that contain PostgreSQL cast expressions (::type) or WHERE clauses (partial indexes).
+        // Both must be stripped via regex BEFORE passing to JSQLParser to avoid D-01 parse failure.
+        String upper2 = trimmed.toUpperCase();
+        if (upper2.startsWith("CREATE") && upper2.contains("INDEX")) {
+            // PRXY-09: Strip ::type cast expressions (e.g. col::varchar(250) → col)
+            if (sql.contains("::")) {
+                sql = sql.replaceAll("\\s*::\\w+(\\(\\d+\\))?", "");
+                System.err.println("[CRATE PROXY] PRE-STRIP CAST EXPR in CREATE INDEX (before parse)");
+            }
+            // PRXY-10: Strip WHERE clause from partial indexes
+            if (sql.toUpperCase().contains(" WHERE ")) {
+                sql = sql.replaceAll("(?i)\\s+WHERE\\s+.+$", "");
+                System.err.println("[CRATE PROXY] PRE-STRIP PARTIAL INDEX WHERE (before parse)");
+            }
+        }
+
         // Parse the SQL for DDL analysis (only when not already handled above)
         Statement stmt;
         try {
@@ -182,42 +199,27 @@ public class SqlRewriter {
             }
         }
 
-        // PRXY-11: Inject WITH (number_of_replicas = '1') for CrateDB cluster replication
-        // Required: 3-node cluster needs explicit replica count per table.
-        // JSQLParser 5.x: CreateTable has getTableOptionsStrings() which maps to the WITH clause.
-        // Assumption A1: setTableOptionsStrings() with value "(number_of_replicas = '1')"
-        // serializes to "WITH (number_of_replicas = '1')" in ct.toString().
-        // If A1 is wrong (WITH keyword missing), fallback to string append after ct.toString().
-        boolean hasReplicas = false;
-        List<String> existingOpts = ct.getTableOptionsStrings();
-        if (existingOpts != null) {
-            hasReplicas = existingOpts.stream()
-                .anyMatch(o -> o != null && o.contains("number_of_replicas"));
-        }
-        if (!hasReplicas) {
-            List<String> opts = existingOpts != null ? new ArrayList<>(existingOpts) : new ArrayList<>();
-            opts.add("(number_of_replicas = '1')");
-            ct.setTableOptionsStrings(opts);
-            modified = true;
-        }
+        // PRXY-11: Inject WITH (number_of_replicas = '1') for CrateDB cluster replication.
+        // This runs ALWAYS (not gated on `modified`) since every CREATE TABLE needs the clause.
+        // Strategy: serialize to string (using original if unmodified to preserve round-trip),
+        // then append WITH clause if not already present.
+        // NOTE: JSQLParser 5.3 setTableOptionsStrings() does NOT emit the "WITH" keyword so
+        // we do string-level append instead.
+        String baseResult = modified ? ct.toString() : originalSql;
 
-        if (!modified) return originalSql;  // unchanged — avoid JSQLParser round-trip noise
-
-        String ctResult = ct.toString();
-
-        // Assumption A1 fallback: verify WITH keyword appears in serialized output.
-        // If JSQLParser does not include "WITH" automatically, append it manually.
-        if (!hasReplicas && !ctResult.toUpperCase().contains("WITH (NUMBER_OF_REPLICAS")) {
-            ctResult = ctResult.stripTrailing();
+        if (!baseResult.toUpperCase().contains("NUMBER_OF_REPLICAS")) {
+            String ctResult = baseResult.stripTrailing();
             if (ctResult.endsWith(";")) {
                 ctResult = ctResult.substring(0, ctResult.length() - 1).stripTrailing()
                     + " WITH (number_of_replicas = '1')";
             } else {
                 ctResult = ctResult + " WITH (number_of_replicas = '1')";
             }
+            return ctResult;
         }
 
-        return ctResult;
+        if (!modified) return originalSql;
+        return baseResult;
     }
 
     /**
