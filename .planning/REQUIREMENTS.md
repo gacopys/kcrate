@@ -7,10 +7,10 @@
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: 3-node CrateDB cluster forms successfully in Docker Compose (all nodes joined, cluster health green)
-- [ ] **INFRA-02**: Docker Compose setup is self-contained — single `docker compose up` starts the full stack
-- [ ] **INFRA-03**: JDBC proxy JAR is built automatically as part of Docker Compose startup (Maven builder service)
-- [ ] **INFRA-04**: Keycloak connects to CrateDB via the custom JDBC proxy driver (no ClassNotFoundException)
+- [x] **INFRA-01**: 3-node CrateDB cluster forms successfully in Docker Compose (all nodes joined, cluster health green)
+- [x] **INFRA-02**: Docker Compose setup is self-contained — single `docker compose up` starts the full stack
+- [x] **INFRA-03**: JDBC proxy JAR is built automatically as part of Docker Compose startup (Maven builder service)
+- [x] **INFRA-04**: Keycloak connects to CrateDB via the custom JDBC proxy driver (no ClassNotFoundException)
 
 ### Proxy Core
 
@@ -74,10 +74,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
+| INFRA-02 | Phase 1 | Complete |
+| INFRA-03 | Phase 1 | Complete |
+| INFRA-04 | Phase 1 | Complete |
 | PRXY-01 | Phase 2 | Pending |
 | PRXY-02 | Phase 2 | Pending |
 | PRXY-03 | Phase 2 | Pending |

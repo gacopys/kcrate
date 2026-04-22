@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Create Maven proxy stub project and docker-compose.yml
+- [x] 01-01-PLAN.md — Create Maven proxy stub project and docker-compose.yml
 - [ ] 01-02-PLAN.md — Start stack and verify Phase 1 success criteria (human checkpoint)
 
 ### Phase 2: JDBC Proxy Implementation
@@ -74,7 +74,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Bootstrap | 0/2 | Not started | - |
+| 1. Infrastructure Bootstrap | 1/2 | In Progress|  |
 | 2. JDBC Proxy Implementation | 0/TBD | Not started | - |
 | 3. Schema Migration | 0/TBD | Not started | - |
 | 4. Functional Validation + Cluster Resilience | 0/TBD | Not started | - |
